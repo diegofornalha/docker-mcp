@@ -1,0 +1,35 @@
+# Ambiente virtual (não mais necessário)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Arquivos de configuração e scripts
+*.sh
+!requirements.txt
+
+# Documentação
+*.md
+
+# Arquivos de teste
+test_*
+*_test.py
+
+# Arquivos temporários
+*.log
+*.tmp
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Cache
+.cache/
+*.lock

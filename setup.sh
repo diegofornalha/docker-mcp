@@ -1,42 +1,38 @@
 #!/bin/bash
-# Setup Docker MCP Server
+# Setup Docker MCP Server (Containerizado)
 
-echo "🐳 Configurando Docker MCP Server..."
-
-# Criar ambiente virtual
-if [ ! -d "venv" ]; then
-    echo "Criando ambiente virtual..."
-    python3 -m venv venv
-fi
-
-# Ativar ambiente virtual
-source venv/bin/activate
-
-# Instalar dependências
-echo "Instalando dependências..."
-pip install --upgrade pip
-pip install httpx mcp python-dotenv python-on-whales pyyaml
+echo "🐳 Configurando Docker MCP Server (Docker)..."
 
 # Verificar se Docker está instalado
 if ! command -v docker &> /dev/null; then
-    echo "⚠️  Docker não está instalado. Instale o Docker Desktop primeiro."
+    echo "⚠️  Docker não está instalado. Instale o Docker primeiro."
     exit 1
 fi
 
 # Verificar se Docker está rodando
 if ! docker info &> /dev/null; then
-    echo "⚠️  Docker não está em execução. Inicie o Docker Desktop."
+    echo "⚠️  Docker não está em execução. Inicie o Docker."
     exit 1
 fi
 
+# Construir imagem Docker
+echo "Construindo imagem Docker..."
+docker build -t docker-mcp:latest .
+
+if [ $? -eq 0 ]; then
+    echo "✅ Imagem Docker construída com sucesso!"
+else
+    echo "❌ Erro ao construir imagem Docker"
+    exit 1
+fi
+
+echo ""
 echo "✅ Docker MCP configurado com sucesso!"
 echo ""
-echo "Para iniciar o servidor:"
-echo "  ./start.sh"
+echo "Para adicionar ao Claude Code:"
+echo "  claude mcp add docker-mcp -s user -- $PWD/start-docker.sh"
 echo ""
-echo "Para adicionar ao Claude, adicione isto ao seu claude_desktop_config.json:"
-echo '{
-  "docker": {
-    "command": "/root/.claude/docker-mcp/start.sh"
-  }
-}'
+echo "Para testar o container:"
+echo "  ./start-docker.sh"
+echo ""
+echo "📝 NOTA: Não é mais necessário usar ambiente virtual (venv)"

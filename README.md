@@ -2,29 +2,35 @@
 
 > Gerencie containers Docker diretamente através do Claude usando o Model Context Protocol (MCP)
 
-## ✅ Instalação Correta
+## 🚀 Instalação (Containerizado)
 
-### Comando que FUNCIONA:
+### Método Recomendado - Docker:
 ```bash
 # 1. Navegue até o diretório
 cd /root/.claude/docker-mcp
 
-# 2. Execute o setup (se ainda não fez)
-./setup.sh
+# 2. Construa a imagem (se ainda não existe)
+docker build -t docker-mcp:latest .
 
-# 3. Adicione ao Claude (USE ESTE COMANDO EXATO!)
-claude mcp add docker-mcp -s user -- \
-  /root/.claude/docker-mcp/venv/bin/python3 \
-  /root/.claude/docker-mcp/docker_mcp_server.py
+# 3. Adicione ao Claude
+claude mcp add docker-mcp -s user -- /root/.claude/docker-mcp/start-docker.sh
 
 # 4. Verifique
 claude mcp list
 ```
 
+### Método Alternativo - Python Local (Legado):
+```bash
+# Use apenas se preferir não usar Docker
+claude mcp add docker-mcp -s user -- \
+  /root/.claude/docker-mcp/venv/bin/python3 \
+  /root/.claude/docker-mcp/docker_mcp_server.py
+```
+
 ### ⚠️ IMPORTANTE:
-- **USE SEMPRE** o script `docker_mcp_server.py`
-- **USE SEMPRE** o Python do venv: `/root/.claude/docker-mcp/venv/bin/python3`
-- **NÃO USE** outros scripts run.py ou wrappers
+- **RECOMENDADO**: Use o método containerizado com `start-docker.sh`
+- **Container tem acesso total** ao Docker do host via socket
+- **Não precisa mais do venv** se usar o método Docker
 
 ## 🚀 Ferramentas Disponíveis (14 total)
 
@@ -56,10 +62,27 @@ claude mcp add docker-mcp -s user -- /root/.claude/docker-mcp/venv/bin/python3 /
 
 ## 📁 Arquivos Importantes
 
-- `docker_mcp_server.py` - Script principal (USE ESTE!)
-- `setup.sh` - Instalador de dependências
-- `SOLUCAO_DEFINITIVA_DOCKER_MCP.md` - Solução para erros
+### Arquivos Docker (Novo):
+- `Dockerfile` - Define a imagem Docker do MCP
+- `requirements.txt` - Dependências Python
+- `start-docker.sh` - Script para iniciar via Docker
+- `.dockerignore` - Arquivos ignorados no build
+- `CONTAINERIZATION.md` - Documentação da containerização
+
+### Arquivos Originais:
+- `docker_mcp_server.py` - Script principal do servidor
 - `src/` - Código fonte do servidor MCP
+- `setup.sh` - Instalador de dependências (legado)
+
+## 🔄 Migração para Docker
+
+1. **Teste o container**: `./start-docker.sh`
+2. **Se funcionar bem**: `rm -rf venv/`
+3. **Atualize o Claude**: 
+   ```bash
+   claude mcp remove docker-mcp -s user
+   claude mcp add docker-mcp -s user -- /root/.claude/docker-mcp/start-docker.sh
+   ```
 
 ---
-Versão: 0.3.0 | Status: ✅ Funcionando
+Versão: 0.4.0 | Status: ✅ Containerizado
