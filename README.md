@@ -72,7 +72,7 @@ Mostre os logs do container nginx
 - Docker Desktop instalado e rodando
 - macOS (testado) ou Linux
 
-## Troubleshooting
+## Solução de Problemas
 
 Se o servidor não iniciar:
 1. Verifique se o Docker está rodando: `docker info`

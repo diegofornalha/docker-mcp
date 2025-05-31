@@ -115,14 +115,15 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="deploy-compose",
-            description="Deploy a Docker Compose stack",
+            description="Deploy a Docker Compose stack from YAML content or local file",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "compose_yaml": {"type": "string"},
-                    "project_name": {"type": "string"}
+                    "compose_yaml": {"type": "string", "description": "Docker Compose YAML content (if not using compose_file)"},
+                    "compose_file": {"type": "string", "description": "Path to local docker-compose.yml file (if not using compose_yaml)"},
+                    "project_name": {"type": "string", "description": "Name for the Docker Compose project"}
                 },
-                "required": ["compose_yaml", "project_name"]
+                "required": ["project_name"]
             }
         ),
         types.Tool(
@@ -138,10 +139,141 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="list-containers",
-            description="List all Docker containers",
+            description="List all Docker containers with detailed information",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "all": {
+                        "type": "boolean",
+                        "description": "Show all containers (default shows only running)",
+                        "default": True
+                    }
+                }
+            }
+        ),
+        types.Tool(
+            name="stop-container",
+            description="Stop a running Docker container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_name": {"type": "string"}
+                },
+                "required": ["container_name"]
+            }
+        ),
+        types.Tool(
+            name="start-container",
+            description="Start a stopped Docker container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_name": {"type": "string"}
+                },
+                "required": ["container_name"]
+            }
+        ),
+        types.Tool(
+            name="remove-container",
+            description="Remove a Docker container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_name": {"type": "string"},
+                    "force": {
+                        "type": "boolean",
+                        "description": "Force removal of running container",
+                        "default": False
+                    }
+                },
+                "required": ["container_name"]
+            }
+        ),
+        types.Tool(
+            name="list-images",
+            description="List all Docker images available locally",
             inputSchema={
                 "type": "object",
                 "properties": {}
+            }
+        ),
+        types.Tool(
+            name="pull-image",
+            description="Download or update a Docker image",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image": {"type": "string", "description": "Image name with optional tag (e.g. nginx:latest)"}
+                },
+                "required": ["image"]
+            }
+        ),
+        types.Tool(
+            name="remove-image",
+            description="Remove a Docker image",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image": {"type": "string", "description": "Image name or ID"},
+                    "force": {
+                        "type": "boolean",
+                        "description": "Force removal even if used by containers",
+                        "default": False
+                    }
+                },
+                "required": ["image"]
+            }
+        ),
+        types.Tool(
+            name="list-volumes",
+            description="List all Docker volumes",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filters": {
+                        "type": "object",
+                        "description": "Filter volumes (e.g. {'dangling': 'true'})",
+                        "additionalProperties": {"type": "string"}
+                    }
+                }
+            }
+        ),
+        types.Tool(
+            name="remove-volume",
+            description="Remove a Docker volume",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "volume_name": {"type": "string", "description": "Volume name or ID"},
+                    "force": {
+                        "type": "boolean",
+                        "description": "Force removal even if in use",
+                        "default": False
+                    }
+                },
+                "required": ["volume_name"]
+            }
+        ),
+        types.Tool(
+            name="compose-down",
+            description="Stop and remove a Docker Compose stack",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string", "description": "Name of the Docker Compose project"},
+                    "compose_file": {"type": "string", "description": "Optional path to docker-compose.yml file"},
+                    "remove_volumes": {
+                        "type": "boolean",
+                        "description": "Also remove named volumes declared in the volumes section",
+                        "default": False
+                    },
+                    "remove_images": {
+                        "type": "boolean", 
+                        "description": "Remove images used by services",
+                        "default": False
+                    }
+                },
+                "required": ["project_name"]
             }
         )
     ]
@@ -149,7 +281,7 @@ async def handle_list_tools() -> List[types.Tool]:
 
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[types.TextContent]:
-    if not arguments and name != "list-containers":
+    if not arguments and name not in ["list-containers", "list-images", "list-volumes"]:
         raise ValueError("Missing arguments")
 
     try:
@@ -161,6 +293,24 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[
             return await DockerHandlers.handle_get_logs(arguments)
         elif name == "list-containers":
             return await DockerHandlers.handle_list_containers(arguments)
+        elif name == "stop-container":
+            return await DockerHandlers.handle_stop_container(arguments)
+        elif name == "start-container":
+            return await DockerHandlers.handle_start_container(arguments)
+        elif name == "remove-container":
+            return await DockerHandlers.handle_remove_container(arguments)
+        elif name == "list-images":
+            return await DockerHandlers.handle_list_images(arguments)
+        elif name == "pull-image":
+            return await DockerHandlers.handle_pull_image(arguments)
+        elif name == "remove-image":
+            return await DockerHandlers.handle_remove_image(arguments)
+        elif name == "list-volumes":
+            return await DockerHandlers.handle_list_volumes(arguments)
+        elif name == "remove-volume":
+            return await DockerHandlers.handle_remove_volume(arguments)
+        elif name == "compose-down":
+            return await DockerHandlers.handle_compose_down(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:

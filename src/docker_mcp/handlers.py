@@ -70,22 +70,36 @@ class DockerHandlers:
         debug_info = []
         try:
             compose_yaml = arguments.get("compose_yaml")
+            compose_file = arguments.get("compose_file")
             project_name = arguments.get("project_name")
 
-            if not compose_yaml or not project_name:
-                raise ValueError(
-                    "Missing required compose_yaml or project_name")
+            if not project_name:
+                raise ValueError("Missing required project_name")
+            
+            if not compose_yaml and not compose_file:
+                raise ValueError("Either compose_yaml or compose_file must be provided")
 
-            yaml_content = DockerHandlers._process_yaml(
-                compose_yaml, debug_info)
-            compose_path = DockerHandlers._save_compose_file(
-                yaml_content, project_name)
+            # Handle local file path
+            if compose_file:
+                if not os.path.exists(compose_file):
+                    raise ValueError(f"Docker Compose file not found: {compose_file}")
+                compose_path = compose_file
+                debug_info.append(f"Using local compose file: {compose_file}")
+                cleanup_needed = False
+            else:
+                # Handle inline YAML content
+                yaml_content = DockerHandlers._process_yaml(
+                    compose_yaml, debug_info)
+                compose_path = DockerHandlers._save_compose_file(
+                    yaml_content, project_name)
+                cleanup_needed = True
 
             try:
                 result = await DockerHandlers._deploy_stack(compose_path, project_name, debug_info)
                 return [TextContent(type="text", text=result)]
             finally:
-                DockerHandlers._cleanup_files(compose_path)
+                if cleanup_needed:
+                    DockerHandlers._cleanup_files(compose_path)
 
         except Exception as e:
             debug_output = "\n".join(debug_info)
@@ -180,15 +194,186 @@ class DockerHandlers:
             return [TextContent(type="text", text=f"Error retrieving logs: {str(e)}\n\nDebug Information:\n{debug_output}")]
 
     @staticmethod
-    async def handle_list_containers(arguments: Dict[str, Any]) -> List[TextContent]:
+    async def handle_list_containers(arguments: Dict[str, Any] | None) -> List[TextContent]:
         debug_info = []
         try:
-            debug_info.append("Listing all Docker containers")
-            containers = await asyncio.to_thread(docker_client.container.list, all=True)
-            container_list = "\n".join(
-                [f"{c.id[:12]} - {c.name} - {c.state.status}" for c in containers])
-
-            return [TextContent(type="text", text=f"All Docker Containers:\n{container_list}\n\nDebug Info:\n{chr(10).join(debug_info)}")]
+            show_all = True if not arguments else arguments.get("all", True)
+            debug_info.append(f"Listing Docker containers (all={show_all})")
+            
+            containers = await asyncio.to_thread(docker_client.container.list, all=show_all)
+            
+            container_info = []
+            for c in containers:
+                ports = []
+                if hasattr(c, 'ports') and c.ports:
+                    for port_mapping in c.ports.items():
+                        ports.append(f"{port_mapping[0]}->{port_mapping[1]}")
+                ports_str = ", ".join(ports) if ports else "No ports"
+                
+                status = c.state.status
+                if status == "running" and hasattr(c.state, 'started_at'):
+                    status = f"Up {c.state.running_for}" if hasattr(c.state, 'running_for') else "Running"
+                elif status == "exited":
+                    status = f"Exited ({c.state.exit_code})"
+                
+                info = f"• {c.name} ({c.id[:12]})\n  Image: {c.config.image}\n  Status: {status}\n  Ports: {ports_str}"
+                container_info.append(info)
+            
+            result = "\n\n".join(container_info) if container_info else "No containers found"
+            
+            return [TextContent(type="text", text=f"Docker Containers:\n\n{result}")]
         except Exception as e:
             debug_output = "\n".join(debug_info)
             return [TextContent(type="text", text=f"Error listing containers: {str(e)}\n\nDebug Information:\n{debug_output}")]
+
+    @staticmethod
+    async def handle_stop_container(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            container_name = arguments.get("container_name")
+            if not container_name:
+                raise ValueError("Missing required container_name")
+            
+            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            await asyncio.to_thread(container.stop)
+            
+            return [TextContent(type="text", text=f"Successfully stopped container '{container_name}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error stopping container: {str(e)}")]
+
+    @staticmethod
+    async def handle_start_container(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            container_name = arguments.get("container_name")
+            if not container_name:
+                raise ValueError("Missing required container_name")
+            
+            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            await asyncio.to_thread(container.start)
+            
+            return [TextContent(type="text", text=f"Successfully started container '{container_name}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error starting container: {str(e)}")]
+
+    @staticmethod
+    async def handle_remove_container(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            container_name = arguments.get("container_name")
+            force = arguments.get("force", False)
+            
+            if not container_name:
+                raise ValueError("Missing required container_name")
+            
+            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            
+            # Check if container is running and force is not set
+            if container.state.status == "running" and not force:
+                return [TextContent(type="text", text=f"Container '{container_name}' is running. Use force=true to remove it, or stop it first.")]
+            
+            await asyncio.to_thread(container.remove, force=force)
+            
+            return [TextContent(type="text", text=f"Successfully removed container '{container_name}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error removing container: {str(e)}")]
+
+    @staticmethod
+    async def handle_list_images(arguments: Dict[str, Any] | None) -> List[TextContent]:
+        try:
+            images = await asyncio.to_thread(docker_client.image.list)
+            
+            image_info = []
+            for img in images:
+                # Get tags
+                tags = img.repo_tags if hasattr(img, 'repo_tags') else []
+                tag_str = ", ".join(tags) if tags else "<none>"
+                
+                # Get size
+                size_mb = img.size / (1024 * 1024) if hasattr(img, 'size') else 0
+                size_str = f"{size_mb:.1f}MB"
+                
+                # Get created time
+                created = img.attrs.get('Created', 'Unknown') if hasattr(img, 'attrs') else 'Unknown'
+                
+                info = f"• {tag_str}\n  ID: {img.id[:12]}\n  Size: {size_str}\n  Created: {created}"
+                image_info.append(info)
+            
+            result = "\n\n".join(image_info) if image_info else "No images found"
+            
+            return [TextContent(type="text", text=f"Docker Images:\n\n{result}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error listing images: {str(e)}")]
+
+    @staticmethod
+    async def handle_pull_image(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            image = arguments.get("image")
+            if not image:
+                raise ValueError("Missing required image name")
+            
+            # Pull the image
+            result = await asyncio.to_thread(docker_client.image.pull, image)
+            
+            return [TextContent(type="text", text=f"Successfully pulled image '{image}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error pulling image: {str(e)}")]
+
+    @staticmethod
+    async def handle_remove_image(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            image = arguments.get("image")
+            force = arguments.get("force", False)
+            
+            if not image:
+                raise ValueError("Missing required image name or ID")
+            
+            # Remove the image
+            await asyncio.to_thread(docker_client.image.remove, image, force=force)
+            
+            return [TextContent(type="text", text=f"Successfully removed image '{image}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error removing image: {str(e)}")]
+
+    @staticmethod
+    async def handle_list_volumes(arguments: Dict[str, Any] | None) -> List[TextContent]:
+        try:
+            filters = arguments.get("filters", {}) if arguments else {}
+            
+            volumes = await asyncio.to_thread(docker_client.volume.list, filters=filters)
+            
+            volume_info = []
+            for vol in volumes:
+                # Get volume details
+                name = vol.name if hasattr(vol, 'name') else 'Unknown'
+                driver = vol.driver if hasattr(vol, 'driver') else 'local'
+                mountpoint = vol.mountpoint if hasattr(vol, 'mountpoint') else 'Unknown'
+                
+                # Get labels
+                labels = vol.labels if hasattr(vol, 'labels') else {}
+                label_str = ", ".join([f"{k}={v}" for k, v in labels.items()]) if labels else "No labels"
+                
+                # Get scope
+                scope = vol.scope if hasattr(vol, 'scope') else 'local'
+                
+                info = f"• {name}\n  Driver: {driver}\n  Scope: {scope}\n  Mountpoint: {mountpoint}\n  Labels: {label_str}"
+                volume_info.append(info)
+            
+            result = "\n\n".join(volume_info) if volume_info else "No volumes found"
+            
+            return [TextContent(type="text", text=f"Docker Volumes:\n\n{result}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error listing volumes: {str(e)}")]
+
+    @staticmethod
+    async def handle_remove_volume(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            volume_name = arguments.get("volume_name")
+            force = arguments.get("force", False)
+            
+            if not volume_name:
+                raise ValueError("Missing required volume_name")
+            
+            # Remove the volume
+            await asyncio.to_thread(docker_client.volume.remove, volume_name, force=force)
+            
+            return [TextContent(type="text", text=f"Successfully removed volume '{volume_name}'")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error removing volume: {str(e)}")]
