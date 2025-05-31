@@ -1,5 +1,26 @@
 # Docker MCP - Changelog
 
+## [0.3.0] - 2025-01-30
+
+### 🎉 Novas Funcionalidades
+
+#### Gerenciamento de Volumes
+- **list-volumes**: Lista todos os volumes Docker com detalhes
+- **remove-volume**: Remove volumes Docker (com opção force)
+
+#### Docker Compose Aprimorado
+- **deploy-compose**: Agora suporta arquivos docker-compose.yml locais
+- **compose-down**: Para e remove stacks Docker Compose completas
+  - Opção para remover volumes
+  - Opção para remover imagens
+
+#### Monitoramento
+- **get-container-stats**: Mostra estatísticas de uso de recursos em tempo real
+  - CPU usage
+  - Memória (usage/limit)
+  - Network I/O (RX/TX)
+  - Block I/O (Read/Write)
+
 ## [0.2.0] - 2025-01-30
 
 ### 🎉 Novas Funcionalidades
@@ -47,19 +68,21 @@
 
 ## Roadmap Futuro
 
-### [0.3.0] - Planejado
-- **list-volumes**: Gerenciamento de volumes
-- **remove-volume**: Limpeza de volumes
-- **compose-down**: Parar stacks Docker Compose
-- Suporte para docker-compose.yml local
-
 ### [0.4.0] - Planejado
-- **get-container-stats**: Estatísticas de recursos
 - **container-exec**: Executar comandos em containers
 - **image-build**: Construir imagens a partir de Dockerfile
+- **container-inspect**: Inspecionar detalhes completos de containers
+- **image-inspect**: Inspecionar detalhes completos de imagens
+
+### [0.5.0] - Planejado
+- **network-list**: Listar redes Docker
+- **network-create**: Criar redes personalizadas
+- **network-remove**: Remover redes
+- **network-connect**: Conectar containers a redes
 
 ### [1.0.0] - Planejado
 - Suporte para Docker Swarm
 - Integração com Docker Hub
 - Suporte para Docker remoto (DOCKER_HOST)
 - Interface web opcional
+- Autenticação para registries privados

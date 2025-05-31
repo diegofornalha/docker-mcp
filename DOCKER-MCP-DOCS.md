@@ -13,20 +13,17 @@
 
 ## 🔍 Visão Geral
 
-O Docker MCP é um servidor Model Context Protocol que permite ao Claude interagir com Docker e Docker Compose diretamente. Com ele, você pode:
+O Docker MCP é um servidor Model Context Protocol que permite ao Claude interagir com Docker e Docker Compose diretamente. Com ele, você pode gerenciar todo o ecossistema Docker através de comandos naturais.
 
-- Criar e gerenciar containers Docker
-- Deploy de aplicações usando Docker Compose
-- Visualizar logs de containers
-- Listar containers em execução
+### Características (v0.3.0)
 
-### Características
-
+- ✅ Gerenciamento completo de containers, imagens e volumes
 - ✅ Suporte completo ao Docker e Docker Compose
+- ✅ Monitoramento de recursos em tempo real
 - ✅ Compatível com macOS, Linux e Windows
 - ✅ Integração nativa com Claude Code
 - ✅ Operações assíncronas para melhor performance
-- ✅ Tratamento de erros robusto
+- ✅ Suporte para arquivos docker-compose.yml locais
 
 ## 📦 Instalação
 
@@ -86,6 +83,7 @@ docker-mcp/
 ├── run.py                      # Script runner principal
 ├── start.sh                    # Script de inicialização
 ├── setup.sh                    # Script de instalação
+├── CHANGELOG.md                # Histórico de mudanças
 └── DOCKER-MCP-DOCS.md         # Esta documentação
 ```
 
@@ -99,12 +97,16 @@ export DOCKER_COMMAND_TIMEOUT=300
 
 # Caminho customizado para o Docker (se não estiver no PATH)
 export DOCKER_PATH=/usr/local/bin/docker
+
+# Para Docker remoto (futuro)
+export DOCKER_HOST=tcp://192.168.1.100:2375
 ```
 
 ## 🛠️ Ferramentas Disponíveis
 
-### 1. create-container
+### Gerenciamento de Containers
 
+#### 1. create-container
 Cria e executa um container Docker simples.
 
 **Parâmetros**:
@@ -113,123 +115,234 @@ Cria e executa um container Docker simples.
 - `ports`: Mapeamento de portas (objeto)
 - `environment`: Variáveis de ambiente (objeto)
 
-**Exemplo de uso no Claude**:
-```
-Crie um container nginx chamado "web-server" na porta 8080
-```
-
-**Parâmetros JSON equivalentes**:
+**Exemplo**:
 ```json
 {
   "image": "nginx:latest",
   "name": "web-server",
-  "ports": {
-    "80": "8080"
-  }
+  "ports": {"80": "8080"},
+  "environment": {"ENV": "production"}
 }
 ```
 
-### 2. deploy-compose
-
-Faz deploy de um stack completo usando Docker Compose.
+#### 2. list-containers
+Lista todos os containers com informações detalhadas.
 
 **Parâmetros**:
-- `compose_yaml` (obrigatório): Conteúdo do arquivo docker-compose.yml
-- `project_name` (obrigatório): Nome do projeto
+- `all`: Mostrar todos os containers (padrão: true)
 
-**Exemplo de uso no Claude**:
+**Resposta**:
 ```
-Faça deploy de uma aplicação WordPress com MySQL usando Docker Compose
+• nginx-server (abc123def456)
+  Image: nginx:latest
+  Status: Up 2 hours
+  Ports: 0.0.0.0:8080->80/tcp
 ```
 
-### 3. list-containers
+#### 3. stop-container
+Para um container em execução.
 
-Lista todos os containers Docker (rodando e parados).
+**Parâmetros**:
+- `container_name` (obrigatório): Nome ou ID do container
+
+#### 4. start-container
+Inicia um container parado.
+
+**Parâmetros**:
+- `container_name` (obrigatório): Nome ou ID do container
+
+#### 5. remove-container
+Remove um container.
+
+**Parâmetros**:
+- `container_name` (obrigatório): Nome ou ID do container
+- `force`: Forçar remoção mesmo se estiver rodando (padrão: false)
+
+#### 6. get-logs
+Obtém os logs mais recentes de um container.
+
+**Parâmetros**:
+- `container_name` (obrigatório): Nome ou ID do container
+
+#### 7. get-container-stats
+Mostra estatísticas de recursos em tempo real.
+
+**Parâmetros**:
+- `container_name` (obrigatório): Nome ou ID do container
+
+**Resposta**:
+```
+Container Stats for 'nginx-server':
+
+CPU Usage: 2.34%
+Memory Usage: 45.23 MB / 1024.00 MB (4.42%)
+Network I/O: RX 12.34 MB / TX 5.67 MB
+Block I/O: Read 0.12 MB / Write 0.45 MB
+```
+
+### Gerenciamento de Imagens
+
+#### 8. list-images
+Lista todas as imagens Docker locais.
 
 **Parâmetros**: Nenhum
 
-**Exemplo de uso no Claude**:
+**Resposta**:
 ```
-Liste todos os containers Docker
-```
-
-**Resposta típica**:
-```json
-[
-  {
-    "id": "abc123...",
-    "name": "web-server",
-    "image": "nginx:latest",
-    "status": "running",
-    "ports": "0.0.0.0:8080->80/tcp"
-  }
-]
+• nginx:latest
+  ID: sha256:abc123
+  Size: 142.4MB
+  Created: 2 days ago
 ```
 
-### 4. get-logs
-
-Obtém os logs mais recentes de um container específico.
+#### 9. pull-image
+Baixa ou atualiza uma imagem do Docker Hub.
 
 **Parâmetros**:
-- `container_name` (obrigatório): Nome do container
+- `image` (obrigatório): Nome da imagem com tag opcional
 
-**Exemplo de uso no Claude**:
+**Exemplo**:
+```json
+{
+  "image": "nginx:latest"
+}
 ```
-Mostre os logs do container web-server
+
+#### 10. remove-image
+Remove uma imagem Docker.
+
+**Parâmetros**:
+- `image` (obrigatório): Nome ou ID da imagem
+- `force`: Forçar remoção mesmo se usada por containers (padrão: false)
+
+### Gerenciamento de Volumes
+
+#### 11. list-volumes
+Lista todos os volumes Docker.
+
+**Parâmetros**:
+- `filters`: Filtros opcionais (ex: {"dangling": "true"})
+
+**Resposta**:
 ```
+• my-data-volume
+  Driver: local
+  Scope: local
+  Mountpoint: /var/lib/docker/volumes/my-data-volume/_data
+  Labels: app=myapp, env=prod
+```
+
+#### 12. remove-volume
+Remove um volume Docker.
+
+**Parâmetros**:
+- `volume_name` (obrigatório): Nome do volume
+- `force`: Forçar remoção mesmo se em uso (padrão: false)
+
+### Docker Compose
+
+#### 13. deploy-compose
+Faz deploy de um stack usando Docker Compose.
+
+**Parâmetros**:
+- `project_name` (obrigatório): Nome do projeto
+- `compose_yaml`: Conteúdo YAML inline (se não usar compose_file)
+- `compose_file`: Caminho para arquivo docker-compose.yml local
+
+**Exemplo com arquivo local**:
+```json
+{
+  "project_name": "myapp",
+  "compose_file": "/Users/agents/projeto/docker-compose.yml"
+}
+```
+
+**Exemplo com YAML inline**:
+```json
+{
+  "project_name": "myapp",
+  "compose_yaml": "version: '3.8'\nservices:\n  web:\n    image: nginx"
+}
+```
+
+#### 14. compose-down
+Para e remove um stack Docker Compose.
+
+**Parâmetros**:
+- `project_name` (obrigatório): Nome do projeto
+- `compose_file`: Caminho opcional para docker-compose.yml
+- `remove_volumes`: Remover volumes associados (padrão: false)
+- `remove_images`: Remover imagens usadas (padrão: false)
 
 ## 📚 Exemplos de Uso
 
-### Exemplo 1: Deploy de Aplicação Web Simples
+### Exemplo 1: Ciclo Completo de Container
 
-**Comando para Claude**:
 ```
-Crie um container nginx servindo uma página estática na porta 3000
-```
+# Criar um servidor web
+"Crie um container nginx chamado web-server na porta 8080"
 
-**O que acontece**:
-1. Claude usa `create-container` com nginx
-2. Mapeia porta 80 do container para 3000 do host
-3. Container é criado e iniciado
+# Verificar status
+"Liste todos os containers"
 
-### Exemplo 2: Stack WordPress Completo
+# Monitorar recursos
+"Mostre as estatísticas do container web-server"
 
-**Comando para Claude**:
-```
-Faça deploy de um WordPress com banco de dados MySQL, 
-configure senhas seguras e exponha na porta 8080
-```
+# Parar quando necessário
+"Pare o container web-server"
 
-**O que acontece**:
-1. Claude gera um docker-compose.yml
-2. Configura WordPress e MySQL com senhas
-3. Usa `deploy-compose` para fazer o deploy
-4. Stack completo rodando em minutos
-
-### Exemplo 3: Debugging de Container
-
-**Comando para Claude**:
-```
-Meu container "api-server" está com erro. 
-Mostre os logs e me ajude a debugar
+# Remover quando não precisar mais
+"Remova o container web-server"
 ```
 
-**O que acontece**:
-1. Claude usa `get-logs` para obter logs
-2. Analisa os erros encontrados
-3. Sugere soluções baseadas nos logs
+### Exemplo 2: Gerenciamento de Imagens
 
-### Exemplo 4: Gerenciamento de Múltiplos Containers
-
-**Comando para Claude**:
 ```
-Liste todos os containers e pare os que não estão sendo usados
+# Listar imagens disponíveis
+"Liste todas as imagens Docker"
+
+# Baixar nova imagem
+"Baixe a imagem postgres:15"
+
+# Remover imagem antiga
+"Remova a imagem postgres:14"
 ```
 
-**O que acontece**:
-1. Claude usa `list-containers`
-2. Identifica containers inativos
-3. Sugere quais podem ser removidos
+### Exemplo 3: Deploy com Docker Compose Local
+
+```
+# Deploy usando arquivo existente
+"Faça deploy do meu projeto usando o docker-compose.yml em /Users/agents/myapp"
+
+# Parar e limpar tudo
+"Pare o stack myapp e remova os volumes"
+```
+
+### Exemplo 4: Monitoramento e Debug
+
+```
+# Ver logs de erro
+"Mostre os logs do container api-server"
+
+# Monitorar performance
+"Mostre as estatísticas de CPU e memória do container database"
+
+# Gerenciar volumes
+"Liste todos os volumes Docker e remova os não utilizados"
+```
+
+### Exemplo 5: Stack Completo WordPress
+
+```
+"Crie um stack WordPress com MySQL, configure senhas seguras, 
+use volumes persistentes e exponha na porta 8080"
+```
+
+Claude irá:
+1. Gerar um docker-compose.yml apropriado
+2. Configurar WordPress e MySQL
+3. Criar volumes para persistência
+4. Fazer deploy do stack completo
 
 ## 🏗️ Arquitetura
 
@@ -238,83 +351,103 @@ Liste todos os containers e pare os que não estão sendo usados
 ```
 Claude → MCP Protocol → docker-mcp → Docker Engine
                               ↓
-                        docker_executor.py
+                        handlers.py
                               ↓
-                     Docker CLI/Docker Compose
+                     python-on-whales → Docker CLI
 ```
 
 ### Componentes Principais
 
 #### server.py
+- Define todas as 14 ferramentas disponíveis
 - Implementa o protocolo MCP
-- Define as ferramentas disponíveis
 - Gerencia a comunicação com Claude
+- Versão atual: 0.3.0
 
 #### handlers.py
 - Contém a lógica de cada ferramenta
-- Valida parâmetros
-- Formata respostas
+- Validação robusta de parâmetros
+- Formatação detalhada de respostas
+- Tratamento de erros específicos
 
 #### docker_executor.py
+- Executa comandos Docker Compose
+- Gerencia arquivos temporários
 - Abstrai diferenças entre plataformas
-- Executa comandos Docker de forma segura
-- Gerencia timeouts e erros
 
 ### Segurança
 
-- Validação de todos os parâmetros de entrada
-- Sanitização de comandos Docker
-- Timeouts para prevenir travamentos
-- Logs detalhados para auditoria
+- ✅ Validação de todos os parâmetros de entrada
+- ✅ Sanitização de comandos Docker
+- ✅ Timeouts configuráveis para prevenir travamentos
+- ✅ Logs detalhados para auditoria
+- ✅ Isolamento de operações perigosas
 
 ## 🔧 Troubleshooting
 
 ### Problema: "Docker não encontrado"
 
 **Solução**:
-1. Verifique se Docker está instalado: `docker --version`
-2. Certifique-se que Docker Desktop está rodando
-3. Se necessário, configure o PATH:
-   ```bash
-   export DOCKER_PATH=/usr/local/bin/docker
-   ```
+```bash
+# Verificar instalação
+docker --version
+
+# macOS: Instalar Docker Desktop
+brew install --cask docker
+
+# Linux: Instalar Docker Engine
+curl -fsSL https://get.docker.com | sh
+```
 
 ### Problema: "Permissão negada"
 
-**Solução**:
-1. No Linux, adicione seu usuário ao grupo docker:
-   ```bash
-   sudo usermod -aG docker $USER
-   ```
-2. Faça logout e login novamente
+**Solução Linux**:
+```bash
+sudo usermod -aG docker $USER
+# Fazer logout e login novamente
+```
 
 ### Problema: "Container não inicia"
 
 **Diagnóstico**:
 ```
-Use o comando "mostre os logs do container [nome]" no Claude
+"Mostre os logs do container [nome]"
+"Liste todos os containers e seus status"
+"Verifique as portas em uso"
 ```
 
-### Logs do MCP
+### Problema: "MCP não responde"
 
-Para debug avançado, verifique os logs:
+**Debug**:
 ```bash
-# Logs do Claude
+# Ver logs do MCP
 tail -f ~/Library/Logs/Claude/mcp-docker-mcp.log
 
-# Executar servidor manualmente para ver erros
-python3 /Users/agents/.claude/docker-mcp/run.py
+# Testar servidor manualmente
+cd /Users/agents/.claude/docker-mcp
+source venv/bin/activate
+python3 run.py
+```
+
+### Verificar Processos
+
+```bash
+# Ver se docker-mcp está rodando
+ps aux | grep docker-mcp
+
+# Reiniciar se necessário
+claude mcp restart docker-mcp
 ```
 
 ## 👨‍💻 Desenvolvimento
 
 ### Adicionando Novas Ferramentas
 
-1. **Defina a ferramenta em server.py**:
+1. **Defina em server.py**:
 ```python
 types.Tool(
     name="nova-ferramenta",
-    description="Descrição da ferramenta",
+    description="Descrição clara",
     inputSchema={
         "type": "object",
         "properties": {
@@ -325,12 +458,13 @@ types.Tool(
 )
 ```
 
-2. **Implemente o handler em handlers.py**:
+2. **Implemente em handlers.py**:
 ```python
 @staticmethod
-async def handle_nova_ferramenta(arguments: Dict[str, Any]) -> List[types.TextContent]:
-    # Implementação aqui
-    return [types.TextContent(type="text", text="Resultado")]
+async def handle_nova_ferramenta(arguments: Dict[str, Any]) -> List[TextContent]:
+    param1 = arguments.get("param1")
+    # Implementação
+    return [TextContent(type="text", text="Resultado")]
 ```
 
 3. **Adicione ao switch em server.py**:
@@ -342,65 +476,78 @@ elif name == "nova-ferramenta":
 ### Testando Localmente
 
 ```bash
-# Ativar ambiente virtual
+# Preparar ambiente
+cd /Users/agents/.claude/docker-mcp
 source venv/bin/activate
 
-# Executar servidor em modo debug
-python3 run.py
+# Executar testes
+python3 -m pytest tests/
 
-# Em outro terminal, envie comandos MCP de teste
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python3 run.py
+# Executar servidor em modo debug
+PYTHONPATH=. python3 run.py
 ```
 
 ### Contribuindo
 
 1. Fork o repositório
-2. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
-3. Commit suas mudanças: `git commit -am 'Add nova funcionalidade'`
-4. Push: `git push origin feature/nova-funcionalidade`
+2. Crie uma branch: `git checkout -b feature/minha-feature`
+3. Faça commit: `git commit -am 'Add: nova funcionalidade'`
+4. Push: `git push origin feature/minha-feature`
 5. Abra um Pull Request
 
 ## 📝 Notas Adicionais
 
 ### Performance
 
-- Operações assíncronas para não bloquear Claude
-- Timeouts configuráveis para comandos longos
-- Cache de resultados quando apropriado
+- Todas operações são assíncronas
+- Timeout padrão de 200 segundos
+- Suporte para operações concorrentes
+- Cache inteligente de resultados
 
 ### Compatibilidade
 
-- **macOS**: Totalmente compatível
+- **macOS**: Totalmente compatível (testado)
 - **Linux**: Totalmente compatível
-- **Windows**: Compatível com Docker Desktop
+- **Windows**: Compatível via Docker Desktop
 - **WSL2**: Recomendado para Windows
 
-### Limitações Conhecidas
+### Limitações Atuais
 
-1. Não suporta Docker Swarm (apenas Docker e Compose)
+1. Não suporta Docker Swarm ainda
 2. Limite de 100 linhas de logs por vez
-3. Não manipula imagens Docker diretamente (use CLI)
+3. Não suporta builds de imagens ainda
+4. Sem suporte para Docker remoto (em desenvolvimento)
 
 ### Roadmap
 
-- [ ] Suporte para Docker Swarm
-- [ ] Gerenciamento de imagens
-- [ ] Métricas de containers
-- [ ] Integração com Docker Hub
-- [ ] Suporte para Kubernetes
+**v0.4.0** (Próxima)
+- [ ] container-exec: Executar comandos em containers
+- [ ] image-build: Construir imagens de Dockerfile
+- [ ] container-inspect: Detalhes completos
+- [ ] image-inspect: Detalhes de imagens
+
+**v0.5.0**
+- [ ] Gerenciamento de redes Docker
+- [ ] Suporte para Docker registries
+- [ ] Healthchecks automáticos
+
+**v1.0.0**
+- [ ] Suporte Docker Swarm
+- [ ] Docker remoto (DOCKER_HOST)
+- [ ] Interface web opcional
 
 ## 🆘 Suporte
 
 Para problemas ou dúvidas:
 
-1. Verifique esta documentação
-2. Consulte os logs em `~/Library/Logs/Claude/`
-3. Execute o servidor manualmente para debug
-4. Abra uma issue no repositório
+1. Consulte esta documentação
+2. Verifique os logs: `~/Library/Logs/Claude/`
+3. Execute diagnóstico: `"Liste containers e mostre logs de erros"`
+4. Reporte issues no GitHub
 
 ---
 
-**Versão**: 0.1.0  
-**Última atualização**: Janeiro 2025  
+**Versão**: 0.3.0  
+**Última atualização**: 30 de Janeiro de 2025  
 **Autor**: Diego (via Claude)  
 **Licença**: MIT

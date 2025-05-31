@@ -275,6 +275,17 @@ async def handle_list_tools() -> List[types.Tool]:
                 },
                 "required": ["project_name"]
             }
+        ),
+        types.Tool(
+            name="get-container-stats",
+            description="Get real-time resource usage statistics for a container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_name": {"type": "string", "description": "Container name or ID"}
+                },
+                "required": ["container_name"]
+            }
         )
     ]
 
@@ -311,6 +322,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[
             return await DockerHandlers.handle_remove_volume(arguments)
         elif name == "compose-down":
             return await DockerHandlers.handle_compose_down(arguments)
+        elif name == "get-container-stats":
+            return await DockerHandlers.handle_get_container_stats(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -327,7 +340,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="docker-mcp",
-                server_version="0.1.0",
+                server_version="0.3.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

@@ -377,3 +377,144 @@ class DockerHandlers:
             return [TextContent(type="text", text=f"Successfully removed volume '{volume_name}'")]
         except Exception as e:
             return [TextContent(type="text", text=f"Error removing volume: {str(e)}")]
+
+    @staticmethod
+    async def handle_compose_down(arguments: Dict[str, Any]) -> List[TextContent]:
+        debug_info = []
+        try:
+            project_name = arguments.get("project_name")
+            compose_file = arguments.get("compose_file")
+            remove_volumes = arguments.get("remove_volumes", False)
+            remove_images = arguments.get("remove_images", False)
+            
+            if not project_name:
+                raise ValueError("Missing required project_name")
+            
+            # If compose_file is provided, use it
+            if compose_file:
+                if not os.path.exists(compose_file):
+                    raise ValueError(f"Docker Compose file not found: {compose_file}")
+                compose_path = compose_file
+                debug_info.append(f"Using local compose file: {compose_file}")
+            else:
+                # Try to find existing compose file for the project
+                compose_dir = os.path.join(os.getcwd(), "docker_compose_files")
+                compose_path = os.path.join(compose_dir, f"{project_name}-docker-compose.yml")
+                
+                # If no file exists, we'll try to stop by project name only
+                if not os.path.exists(compose_path):
+                    compose_path = None
+                    debug_info.append(f"No compose file found, attempting to stop by project name: {project_name}")
+            
+            # Execute docker-compose down
+            compose = DockerComposeExecutor(compose_path, project_name)
+            
+            # Build additional flags
+            extra_args = []
+            if remove_volumes:
+                extra_args.append("--volumes")
+            if remove_images:
+                extra_args.append("--rmi")
+                extra_args.append("all")
+            
+            # Custom down method with extra arguments
+            async def down_with_options():
+                if compose_path:
+                    cmd = ["docker-compose", "-f", compose_path, "-p", project_name, "down"] + extra_args
+                else:
+                    cmd = ["docker-compose", "-p", project_name, "down"] + extra_args
+                
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                return process.returncode, stdout.decode(), stderr.decode()
+            
+            code, out, err = await down_with_options()
+            
+            debug_info.extend([
+                f"\n=== Docker Compose Down ===",
+                f"Return Code: {code}",
+                f"Stdout: {out}",
+                f"Stderr: {err}"
+            ])
+            
+            if code == 0:
+                result = f"Successfully stopped and removed compose stack '{project_name}'"
+                if remove_volumes:
+                    result += " (volumes removed)"
+                if remove_images:
+                    result += " (images removed)"
+                result += f"\n\nOutput:\n{out}"
+            else:
+                result = f"Failed to stop compose stack '{project_name}': {err}"
+            
+            return [TextContent(type="text", text=f"{result}\n\nDebug Info:\n{chr(10).join(debug_info)}")]
+            
+        except Exception as e:
+            debug_output = "\n".join(debug_info)
+            return [TextContent(type="text", text=f"Error stopping compose stack: {str(e)}\n\nDebug Information:\n{debug_output}")]
+
+    @staticmethod
+    async def handle_get_container_stats(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            container_name = arguments.get("container_name")
+            if not container_name:
+                raise ValueError("Missing required container_name")
+            
+            # Get container
+            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            
+            # Get stats (this returns a generator, we'll get just one snapshot)
+            stats_gen = await asyncio.to_thread(container.stats, stream=False)
+            
+            # Parse the stats
+            if stats_gen:
+                cpu_percent = 0.0
+                memory_usage = 0
+                memory_limit = 0
+                
+                # CPU calculation
+                cpu_delta = stats_gen.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0) - \
+                           stats_gen.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
+                system_cpu_delta = stats_gen.get("cpu_stats", {}).get("system_cpu_usage", 0) - \
+                                  stats_gen.get("precpu_stats", {}).get("system_cpu_usage", 0)
+                number_cpus = len(stats_gen.get("cpu_stats", {}).get("cpu_usage", {}).get("percpu_usage", []))
+                
+                if system_cpu_delta > 0 and cpu_delta > 0:
+                    cpu_percent = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+                
+                # Memory usage
+                memory_stats = stats_gen.get("memory_stats", {})
+                memory_usage = memory_stats.get("usage", 0)
+                memory_limit = memory_stats.get("limit", 0)
+                memory_percent = (memory_usage / memory_limit * 100) if memory_limit > 0 else 0
+                
+                # Network I/O
+                networks = stats_gen.get("networks", {})
+                network_rx = sum(net.get("rx_bytes", 0) for net in networks.values())
+                network_tx = sum(net.get("tx_bytes", 0) for net in networks.values())
+                
+                # Block I/O
+                blkio_stats = stats_gen.get("blkio_stats", {})
+                block_read = sum(entry.get("value", 0) for entry in blkio_stats.get("io_service_bytes_recursive", []) 
+                               if entry.get("op") == "Read")
+                block_write = sum(entry.get("value", 0) for entry in blkio_stats.get("io_service_bytes_recursive", []) 
+                                if entry.get("op") == "Write")
+                
+                # Format the stats
+                stats_info = f"""Container Stats for '{container_name}':
+
+CPU Usage: {cpu_percent:.2f}%
+Memory Usage: {memory_usage / (1024*1024):.2f} MB / {memory_limit / (1024*1024):.2f} MB ({memory_percent:.2f}%)
+Network I/O: RX {network_rx / (1024*1024):.2f} MB / TX {network_tx / (1024*1024):.2f} MB
+Block I/O: Read {block_read / (1024*1024):.2f} MB / Write {block_write / (1024*1024):.2f} MB"""
+                
+                return [TextContent(type="text", text=stats_info)]
+            else:
+                return [TextContent(type="text", text=f"No stats available for container '{container_name}'")]
+                
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error getting container stats: {str(e)}")]
