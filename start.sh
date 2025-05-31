@@ -20,5 +20,5 @@ if ! python -c "import mcp" 2>/dev/null; then
 fi
 
 # Executar o servidor
-export PYTHONPATH="${PYTHONPATH}:${SCRIPT_DIR}/src"
-python -m docker_mcp.server
+export PYTHONPATH="${SCRIPT_DIR}/src"
+exec python "$SCRIPT_DIR/run.py"

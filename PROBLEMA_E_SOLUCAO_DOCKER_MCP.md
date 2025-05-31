@@ -23,11 +23,11 @@ O Docker MCP estava falhando na conexão com o Claude devido a um problema de co
 #### 1. **Identifiquei o problema**
 ```bash
 # Verificando os logs
-cat /Users/agents/Library/Caches/claude-cli-nodejs/-Users-agents--claude/mcp-logs-docker-mcp/[arquivo].txt
+cat /root/Library/Caches/claude-cli-nodejs/-root--claude/mcp-logs-docker-mcp/[arquivo].txt
 # Mostrava: "Connection closed"
 
 # Testando execução manual
-cd /Users/agents/.claude/docker-mcp/src
+cd /root/.claude/docker-mcp/src
 python3 -m docker_mcp.server
 # Erro: ModuleNotFoundError: No module named 'yaml'
 ```
@@ -58,8 +58,8 @@ claude mcp remove docker-mcp
 
 # Adicionei novamente usando o Python do ambiente virtual
 claude mcp add docker-mcp -s user -- \
-  /Users/agents/.claude/docker-mcp/venv/bin/python3 \
-  /Users/agents/.claude/docker-mcp/docker_mcp_server.py
+  /root/.claude/docker-mcp/venv/bin/python3 \
+  /root/.claude/docker-mcp/docker_mcp_server.py
 ```
 
 ### Por que funcionou:
@@ -100,11 +100,11 @@ claude mcp list | grep docker-mcp
 
 ### Se precisar reinstalar:
 ```bash
-cd /Users/agents/.claude/docker-mcp
+cd /root/.claude/docker-mcp
 ./setup.sh
 claude mcp add docker-mcp -s user -- \
-  /Users/agents/.claude/docker-mcp/venv/bin/python3 \
-  /Users/agents/.claude/docker-mcp/docker_mcp_server.py
+  /root/.claude/docker-mcp/venv/bin/python3 \
+  /root/.claude/docker-mcp/docker_mcp_server.py
 ```
 
 ## 🎯 Lições Aprendidas

@@ -37,6 +37,6 @@ echo ""
 echo "Para adicionar ao Claude, adicione isto ao seu claude_desktop_config.json:"
 echo '{
   "docker": {
-    "command": "/Users/agents/.claude/docker-mcp/start.sh"
+    "command": "/root/.claude/docker-mcp/start.sh"
   }
 }'

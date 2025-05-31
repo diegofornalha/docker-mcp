@@ -37,13 +37,13 @@ O Docker MCP é um servidor Model Context Protocol que permite ao Claude interag
 
 1. **Configure o ambiente**:
 ```bash
-cd /Users/agents/.claude/docker-mcp
+cd /root/.claude/docker-mcp
 ./setup.sh
 ```
 
 2. **Adicione ao Claude Code**:
 ```bash
-claude mcp add docker-mcp -s user -- python3 /Users/agents/.claude/docker-mcp/run.py
+claude mcp add docker-mcp -s user -- python3 /root/.claude/docker-mcp/run.py
 ```
 
 3. **Verifique a instalação**:
@@ -64,27 +64,7 @@ source venv/bin/activate
 pip install httpx mcp python-dotenv python-on-whales pyyaml
 
 # Adicionar ao Claude
-claude mcp add docker-mcp -s user -- python3 /Users/agents/.claude/docker-mcp/run.py
-```
-
-## ⚙️ Configuração
-
-### Estrutura de Arquivos
-
-```
-docker-mcp/
-├── src/
-│   └── docker_mcp/
-│       ├── __init__.py         # Ponto de entrada do módulo
-│       ├── server.py           # Servidor MCP principal
-│       ├── handlers.py         # Handlers das ferramentas
-│       └── docker_executor.py  # Executor de comandos Docker
-├── pyproject.toml              # Configuração do projeto
-├── run.py                      # Script runner principal
-├── start.sh                    # Script de inicialização
-├── setup.sh                    # Script de instalação
-├── CHANGELOG.md                # Histórico de mudanças
-└── DOCKER-MCP-DOCS.md         # Esta documentação
+claude mcp add docker-mcp -s user -- python3 /root/.claude/docker-mcp/run.py
 ```
 
 ### Variáveis de Ambiente
@@ -253,7 +233,7 @@ Faz deploy de um stack usando Docker Compose.
 ```json
 {
   "project_name": "myapp",
-  "compose_file": "/Users/agents/projeto/docker-compose.yml"
+  "compose_file": "/root/projeto/docker-compose.yml"
 }
 ```
 
@@ -312,7 +292,7 @@ Para e remove um stack Docker Compose.
 
 ```
 # Deploy usando arquivo existente
-"Faça deploy do meu projeto usando o docker-compose.yml em /Users/agents/myapp"
+"Faça deploy do meu projeto usando o docker-compose.yml em /root/myapp"
 
 # Parar e limpar tudo
 "Pare o stack myapp e remova os volumes"
@@ -424,7 +404,7 @@ sudo usermod -aG docker $USER
 tail -f ~/Library/Logs/Claude/mcp-docker-mcp.log
 
 # Testar servidor manualmente
-cd /Users/agents/.claude/docker-mcp
+cd /root/.claude/docker-mcp
 source venv/bin/activate
 python3 run.py
 ```
@@ -477,7 +457,7 @@ elif name == "nova-ferramenta":
 
 ```bash
 # Preparar ambiente
-cd /Users/agents/.claude/docker-mcp
+cd /root/.claude/docker-mcp
 source venv/bin/activate
 
 # Executar testes

@@ -20,13 +20,13 @@ with open(config_file, 'r') as f:
 
 # Adicionar Docker MCP
 config['mcpServers']['docker'] = {
-    "command": "/Users/agents/.claude/docker-mcp/start.sh"
+    "command": "/root/.claude/docker-mcp/start.sh"
 }
 
 # Adicionar RAG WebFetch se não existir
 if 'rag-webfetch' not in config['mcpServers']:
     config['mcpServers']['rag-webfetch'] = {
-        "command": "/Users/agents/.claude/mcp-rag-server/start.sh"
+        "command": "/root/.claude/mcp-rag-server/start.sh"
     }
 
 # Salvar

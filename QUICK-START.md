@@ -4,13 +4,13 @@
 
 ### 1️⃣ Configure o ambiente
 ```bash
-cd /Users/agents/.claude/docker-mcp
+cd /root/.claude/docker-mcp
 ./setup.sh
 ```
 
 ### 2️⃣ Adicione ao Claude
 ```bash
-claude mcp add docker-mcp -s user -- python3 /Users/agents/.claude/docker-mcp/run.py
+claude mcp add docker-mcp -s user -- python3 /root/.claude/docker-mcp/run.py
 ```
 
 ### 3️⃣ Teste

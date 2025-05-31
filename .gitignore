@@ -12,3 +12,4 @@ conf
 work
 README_PRIVATE.md
 docker_compose_files
+/venv/

@@ -94,7 +94,7 @@ remove-container("meu-site")
 ```python
 # 1. Usar seu próprio docker-compose.yml
 deploy-compose(
-    compose_file="/Users/agents/meu-projeto/docker-compose.yml",
+    compose_file="/root/meu-projeto/docker-compose.yml",
     project_name="meu-app"
 )
 
