@@ -155,8 +155,7 @@ class DockerHandlers:
             except Exception as e:
                 if command != compose.down:
                     raise e
-                debug_info.append(f"Warning during {
-                                  command.__name__}: {str(e)}")
+                debug_info.append(f"Warning during {command.__name__}: {str(e)}")
 
         code, out, err = await compose.ps()
         service_info = out if code == 0 else "Unable to list services"
@@ -184,8 +183,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
 
-            debug_info.append(f"Fetching logs for container '{
-                              container_name}'")
+            debug_info.append(f"Fetching logs for container '{container_name}'")
             logs = await asyncio.to_thread(docker_client.container.logs, container_name, tail=100)
 
             return [TextContent(type="text", text=f"Logs for container '{container_name}':\n{logs}\n\nDebug Info:\n{chr(10).join(debug_info)}")]
