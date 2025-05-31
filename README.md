@@ -18,7 +18,7 @@ claude mcp add docker-mcp -s user -- \
   /root/.claude/docker-mcp/docker_mcp_server.py
 
 # 4. Verifique
-mcp
+claude mcp list
 ```
 
 ### ⚠️ IMPORTANTE:

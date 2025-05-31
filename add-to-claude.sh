@@ -1,9 +1,9 @@
 #!/bin/bash
-# Adicionar Docker MCP ao Claude Desktop
+# Adicionar Docker MCP ao Claude Code
 
 CONFIG_FILE="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 
-echo "🔧 Adicionando Docker MCP ao Claude Desktop..."
+echo "🔧 Adicionando Docker MCP ao Claude Code..."
 
 # Fazer backup
 cp "$CONFIG_FILE" "$CONFIG_FILE.backup"
@@ -41,4 +41,4 @@ echo "📋 Servidores MCP configurados:"
 echo "  - docker: Gerenciamento de containers Docker"
 echo "  - rag-webfetch: Cache RAG local"
 echo ""
-echo "⚠️  Reinicie o Claude Desktop para aplicar as mudanças!"
+echo "⚠️  Reinicie o Claude Code para aplicar as mudanças!"

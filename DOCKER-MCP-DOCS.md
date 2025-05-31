@@ -43,7 +43,8 @@ cd /root/.claude/docker-mcp
 
 2. **Adicione ao Claude Code**:
 ```bash
-claude mcp add docker-mcp -s user -- python3 /root/.claude/docker-mcp/run.py
+claude mcp add docker-mcp -s user -- python3 /root/.claude/docker-mcp/docker_mcp_server.py
+
 ```
 
 3. **Verifique a instalação**:
