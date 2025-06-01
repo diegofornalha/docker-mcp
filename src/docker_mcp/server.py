@@ -144,7 +144,7 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="list-containers",
-            description="List all Docker containers with detailed information",
+            description="List all Docker containers with detailed information and filtering options",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -152,6 +152,17 @@ async def handle_list_tools() -> List[types.Tool]:
                         "type": "boolean",
                         "description": "Show all containers (default shows only running)",
                         "default": True
+                    },
+                    "filters": {
+                        "type": "object",
+                        "description": "Filter containers by various criteria",
+                        "properties": {
+                            "status": {"type": "string", "description": "Filter by status (created, restarting, running, removing, paused, exited, dead)"},
+                            "label": {"type": "string", "description": "Filter by label (e.g., 'app=web' or just 'app')"},
+                            "network": {"type": "string", "description": "Filter by network name"},
+                            "name": {"type": "string", "description": "Filter by container name pattern"},
+                            "id": {"type": "string", "description": "Filter by container ID prefix"}
+                        }
                     }
                 }
             }
@@ -312,6 +323,33 @@ async def handle_list_tools() -> List[types.Tool]:
                 },
                 "required": ["container_name", "command"]
             }
+        ),
+        types.Tool(
+            name="compose-ps",
+            description="List containers for a specific Docker Compose project",
+            inputSchema={
+                "type": "object", 
+                "properties": {
+                    "project_name": {"type": "string", "description": "Name of the Docker Compose project"},
+                    "all": {"type": "boolean", "description": "Show all containers including stopped ones", "default": False}
+                },
+                "required": ["project_name"]
+            }
+        ),
+        types.Tool(
+            name="compose-logs",
+            description="Get aggregated logs from all services in a Docker Compose project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string", "description": "Name of the Docker Compose project"},
+                    "service": {"type": "string", "description": "Specific service name (optional, shows all if not specified)"},
+                    "tail": {"type": "integer", "description": "Number of lines to show from the end", "default": 100},
+                    "follow": {"type": "boolean", "description": "Follow log output", "default": False},
+                    "timestamps": {"type": "boolean", "description": "Show timestamps", "default": False}
+                },
+                "required": ["project_name"]
+            }
         )
     ]
 
@@ -352,6 +390,10 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[
             return await DockerHandlers.handle_get_container_stats(arguments)
         elif name == "exec-container":
             return await DockerHandlers.handle_exec_container(arguments)
+        elif name == "compose-ps":
+            return await DockerHandlers.handle_compose_ps(arguments)
+        elif name == "compose-logs":
+            return await DockerHandlers.handle_compose_logs(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:

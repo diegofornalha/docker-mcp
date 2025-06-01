@@ -246,9 +246,54 @@ class DockerHandlers:
         debug_info = []
         try:
             show_all = True if not arguments else arguments.get("all", True)
-            debug_info.append(f"Listing Docker containers (all={show_all})")
+            filters = arguments.get("filters", {}) if arguments else {}
             
+            debug_info.append(f"Listing Docker containers (all={show_all}, filters={filters})")
+            
+            # Get all containers first
             containers = await asyncio.to_thread(docker_client.container.list, all=show_all)
+            
+            # Apply filters manually if needed
+            if filters:
+                filtered_containers = []
+                for c in containers:
+                    # Status filter
+                    if filters.get("status") and c.state.status != filters["status"]:
+                        continue
+                    
+                    # Name filter (pattern matching)
+                    if filters.get("name") and filters["name"] not in c.name:
+                        continue
+                    
+                    # ID filter (prefix matching)
+                    if filters.get("id") and not c.id.startswith(filters["id"]):
+                        continue
+                    
+                    # Label filter
+                    if filters.get("label"):
+                        label_match = False
+                        if "=" in filters["label"]:
+                            key, value = filters["label"].split("=", 1)
+                            if c.config.labels.get(key) == value:
+                                label_match = True
+                        else:
+                            # Just check if label key exists
+                            if filters["label"] in c.config.labels:
+                                label_match = True
+                        if not label_match:
+                            continue
+                    
+                    # Network filter
+                    if filters.get("network"):
+                        try:
+                            inspect_data = await asyncio.to_thread(docker_client.container.inspect, c.name)
+                            if filters["network"] not in inspect_data.network_settings.networks:
+                                continue
+                        except:
+                            continue
+                    
+                    filtered_containers.append(c)
+                containers = filtered_containers
             
             container_info = []
             for c in containers:
@@ -296,7 +341,20 @@ class DockerHandlers:
             
             result = "\n\n".join(container_info) if container_info else "No containers found"
             
-            return [TextContent(type="text", text=f"Docker Containers:\n\n{result}")]
+            # Add filter summary if filters were applied
+            output = "Docker Containers"
+            if filters:
+                filter_desc = []
+                for key, value in filters.items():
+                    filter_desc.append(f"{key}={value}")
+                output += f" (filtered by: {', '.join(filter_desc)})"
+            output += f":\n\n{result}"
+            
+            # Add count summary
+            if container_info:
+                output += f"\n\nTotal: {len(container_info)} container(s)"
+            
+            return [TextContent(type="text", text=output)]
         except Exception as e:
             debug_output = "\n".join(debug_info)
             return [TextContent(type="text", text=f"Error listing containers: {str(e)}\n\nDebug Information:\n{debug_output}")]
@@ -650,3 +708,121 @@ Block I/O: Read {block_read / (1024*1024):.2f} MB / Write {block_write / (1024*1
                 return [TextContent(type="text", text=f"Container '{container_name}' is not running. Only running containers can execute commands.")]
             else:
                 return [TextContent(type="text", text=f"Error executing command: {error_msg}")]
+    
+    @staticmethod
+    async def handle_compose_ps(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            project_name = arguments.get("project_name")
+            if not project_name:
+                raise ValueError("Missing required project_name")
+            
+            show_all = arguments.get("all", False)
+            
+            # Get containers with compose project label
+            containers = await asyncio.to_thread(docker_client.container.list, all=show_all)
+            
+            # Filter by compose project
+            compose_containers = []
+            for c in containers:
+                labels = c.config.labels
+                if labels.get("com.docker.compose.project") == project_name:
+                    compose_containers.append(c)
+            
+            if not compose_containers:
+                return [TextContent(type="text", text=f"No containers found for project '{project_name}'")]
+            
+            # Format output similar to docker-compose ps
+            output_lines = [f"Containers for project '{project_name}':", ""]
+            output_lines.append(f"{'SERVICE':<20} {'STATUS':<20} {'PORTS'}")
+            output_lines.append("-" * 70)
+            
+            for c in compose_containers:
+                service_name = c.config.labels.get("com.docker.compose.service", "unknown")
+                status = c.state.status
+                
+                # Get ports
+                ports = []
+                try:
+                    inspect_data = await asyncio.to_thread(docker_client.container.inspect, c.name)
+                    port_bindings = inspect_data.network_settings.ports
+                    if port_bindings:
+                        for container_port, host_bindings in port_bindings.items():
+                            if host_bindings:
+                                for binding in host_bindings:
+                                    host_port = binding.get('HostPort', '')
+                                    if host_port:
+                                        ports.append(f"{host_port}->{container_port}")
+                except:
+                    pass
+                
+                ports_str = ", ".join(ports) if ports else "No ports"
+                output_lines.append(f"{service_name:<20} {status:<20} {ports_str}")
+            
+            output_lines.append(f"\nTotal: {len(compose_containers)} container(s)")
+            
+            return [TextContent(type="text", text="\n".join(output_lines))]
+            
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error listing compose containers: {str(e)}")]
+    
+    @staticmethod
+    async def handle_compose_logs(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            project_name = arguments.get("project_name")
+            if not project_name:
+                raise ValueError("Missing required project_name")
+            
+            service = arguments.get("service")
+            tail = arguments.get("tail", 100)
+            follow = arguments.get("follow", False)
+            timestamps = arguments.get("timestamps", False)
+            
+            # Get containers for the project
+            containers = await asyncio.to_thread(docker_client.container.list, all=True)
+            
+            # Filter by compose project and optionally by service
+            target_containers = []
+            for c in containers:
+                labels = c.config.labels
+                if labels.get("com.docker.compose.project") == project_name:
+                    if not service or labels.get("com.docker.compose.service") == service:
+                        target_containers.append(c)
+            
+            if not target_containers:
+                if service:
+                    return [TextContent(type="text", text=f"No containers found for service '{service}' in project '{project_name}'")]
+                else:
+                    return [TextContent(type="text", text=f"No containers found for project '{project_name}'")]
+            
+            # Collect logs from all containers
+            output_lines = [f"Logs for project '{project_name}'"]
+            if service:
+                output_lines[0] += f" (service: {service})"
+            output_lines.append("=" * 60)
+            
+            for c in target_containers:
+                service_name = c.config.labels.get("com.docker.compose.service", "unknown")
+                container_num = c.config.labels.get("com.docker.compose.container-number", "1")
+                
+                # Build log kwargs
+                log_kwargs = {
+                    "tail": tail,
+                    "follow": follow,
+                    "timestamps": timestamps
+                }
+                
+                try:
+                    logs = await asyncio.to_thread(docker_client.container.logs, c.name, **log_kwargs)
+                    
+                    # Add service prefix to each log line
+                    if logs:
+                        log_lines = logs.strip().split('\n')
+                        for line in log_lines:
+                            output_lines.append(f"[{service_name}_{container_num}] {line}")
+                except Exception as e:
+                    output_lines.append(f"[{service_name}_{container_num}] Error getting logs: {str(e)}")
+            
+            return [TextContent(type="text", text="\n".join(output_lines))]
+            
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error getting compose logs: {str(e)}")]
