@@ -128,11 +128,16 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="get-logs",
-            description="Retrieve the latest logs for a specified Docker container",
+            description="Retrieve logs for a specified Docker container with optional filtering",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "container_name": {"type": "string"}
+                    "container_name": {"type": "string", "description": "Container name or ID"},
+                    "tail": {"type": "integer", "description": "Number of lines to show from the end (default: 100)", "default": 100},
+                    "follow": {"type": "boolean", "description": "Follow log output (default: false)", "default": False},
+                    "timestamps": {"type": "boolean", "description": "Show timestamps (default: false)", "default": False},
+                    "since": {"type": "string", "description": "Show logs since timestamp (e.g., '2h', '2023-01-01T00:00:00')"},
+                    "until": {"type": "string", "description": "Show logs until timestamp"}
                 },
                 "required": ["container_name"]
             }
@@ -286,6 +291,27 @@ async def handle_list_tools() -> List[types.Tool]:
                 },
                 "required": ["container_name"]
             }
+        ),
+        types.Tool(
+            name="exec-container",
+            description="Execute a command inside a running container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_name": {"type": "string", "description": "Container name or ID"},
+                    "command": {"type": "string", "description": "Command to execute"},
+                    "user": {"type": "string", "description": "Username or UID to run the command as"},
+                    "workdir": {"type": "string", "description": "Working directory inside the container"},
+                    "env": {
+                        "type": "object",
+                        "description": "Environment variables to set",
+                        "additionalProperties": {"type": "string"}
+                    },
+                    "privileged": {"type": "boolean", "description": "Run command with extended privileges", "default": False},
+                    "detach": {"type": "boolean", "description": "Run command in background", "default": False}
+                },
+                "required": ["container_name", "command"]
+            }
         )
     ]
 
@@ -324,6 +350,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[
             return await DockerHandlers.handle_compose_down(arguments)
         elif name == "get-container-stats":
             return await DockerHandlers.handle_get_container_stats(arguments)
+        elif name == "exec-container":
+            return await DockerHandlers.handle_exec_container(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:

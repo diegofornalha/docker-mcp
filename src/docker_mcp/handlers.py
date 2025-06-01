@@ -6,6 +6,11 @@ import platform
 from python_on_whales import DockerClient
 from mcp.types import TextContent, Tool, Prompt, PromptArgument, GetPromptResult, PromptMessage
 from .docker_executor import DockerComposeExecutor
+
+# Ensure docker is in PATH
+if '/usr/bin' not in os.environ.get('PATH', ''):
+    os.environ['PATH'] = f"/usr/bin:{os.environ.get('PATH', '')}"
+
 docker_client = DockerClient()
 
 
@@ -182,14 +187,59 @@ class DockerHandlers:
             container_name = arguments.get("container_name")
             if not container_name:
                 raise ValueError("Missing required container_name")
+            
+            # Optional parameters
+            tail = arguments.get("tail", 100)
+            follow = arguments.get("follow", False)
+            timestamps = arguments.get("timestamps", False)
+            since = arguments.get("since", None)
+            until = arguments.get("until", None)
 
-            debug_info.append(f"Fetching logs for container '{container_name}'")
-            logs = await asyncio.to_thread(docker_client.container.logs, container_name, tail=100)
+            debug_info.append(f"Fetching logs for container '{container_name}' (tail={tail}, follow={follow}, timestamps={timestamps})")
+            
+            # First, check if container exists and get its current state
+            try:
+                container_info = await asyncio.to_thread(docker_client.container.inspect, container_name)
+                container_state = container_info.state.status
+                debug_info.append(f"Container state: {container_state}")
+                
+                if container_state in ["dead", "removing"]:
+                    return [TextContent(type="text", text=f"Container '{container_name}' is {container_state} and cannot provide logs")]
+            except Exception as inspect_error:
+                debug_info.append(f"Could not inspect container: {str(inspect_error)}")
+                # Continue anyway, the logs command might still work
+            
+            # Build kwargs for logs command
+            log_kwargs = {
+                "tail": tail,
+                "follow": follow,
+                "timestamps": timestamps
+            }
+            if since:
+                log_kwargs["since"] = since
+            if until:
+                log_kwargs["until"] = until
+            
+            # Get logs
+            logs = await asyncio.to_thread(docker_client.container.logs, container_name, **log_kwargs)
+            
+            # Format the output
+            output = f"Logs for container '{container_name}'"
+            if since or until:
+                output += f" (from {since or 'start'} to {until or 'now'})"
+            output += f":\n{logs}"
 
-            return [TextContent(type="text", text=f"Logs for container '{container_name}':\n{logs}\n\nDebug Info:\n{chr(10).join(debug_info)}")]
+            return [TextContent(type="text", text=output)]
         except Exception as e:
-            debug_output = "\n".join(debug_info)
-            return [TextContent(type="text", text=f"Error retrieving logs: {str(e)}\n\nDebug Information:\n{debug_output}")]
+            error_msg = str(e)
+            # Provide more helpful error messages
+            if "dead or marked for removal" in error_msg:
+                return [TextContent(type="text", text=f"Container '{container_name}' has been removed or recreated. Please use 'list-containers' to find the current container name.")]
+            elif "No such container" in error_msg:
+                return [TextContent(type="text", text=f"Container '{container_name}' not found. Please use 'list-containers' to see available containers.")]
+            else:
+                debug_output = "\n".join(debug_info)
+                return [TextContent(type="text", text=f"Error retrieving logs: {error_msg}\n\nDebug Information:\n{debug_output}")]
 
     @staticmethod
     async def handle_list_containers(arguments: Dict[str, Any] | None) -> List[TextContent]:
@@ -203,14 +253,41 @@ class DockerHandlers:
             container_info = []
             for c in containers:
                 ports = []
-                if hasattr(c, 'ports') and c.ports:
-                    for port_mapping in c.ports.items():
-                        ports.append(f"{port_mapping[0]}->{port_mapping[1]}")
+                
+                # Try to get port bindings from inspect data
+                try:
+                    inspect_data = await asyncio.to_thread(docker_client.container.inspect, c.name)
+                    port_bindings = inspect_data.network_settings.ports
+                    
+                    if port_bindings:
+                        for container_port, host_bindings in port_bindings.items():
+                            if host_bindings:
+                                for binding in host_bindings:
+                                    host_ip = binding.get('HostIp', '0.0.0.0')
+                                    host_port = binding.get('HostPort', '')
+                                    if host_port:
+                                        ports.append(f"{host_ip}:{host_port}->{container_port}")
+                except:
+                    # Fallback to basic port info
+                    if hasattr(c, 'ports') and c.ports:
+                        for port_mapping in c.ports.items():
+                            ports.append(f"{port_mapping[0]}->{port_mapping[1]}")
+                
                 ports_str = ", ".join(ports) if ports else "No ports"
                 
                 status = c.state.status
                 if status == "running" and hasattr(c.state, 'started_at'):
                     status = f"Up {c.state.running_for}" if hasattr(c.state, 'running_for') else "Running"
+                    
+                    # Check health status
+                    try:
+                        if hasattr(inspect_data.state, 'health') and inspect_data.state.health:
+                            health_status = inspect_data.state.health.status
+                            if health_status:
+                                status = f"{status} ({health_status})"
+                    except:
+                        pass
+                        
                 elif status == "exited":
                     status = f"Exited ({c.state.exit_code})"
                 
@@ -462,45 +539,34 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            # Get container
-            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            # Get stats directly from docker_client.container.stats
+            stats_list = await asyncio.to_thread(docker_client.container.stats, container_name)
             
-            # Get stats (this returns a generator, we'll get just one snapshot)
-            stats_gen = await asyncio.to_thread(container.stats, stream=False)
+            # python-on-whales returns a list of ContainerStats objects
+            if not stats_list or len(stats_list) == 0:
+                return [TextContent(type="text", text=f"No stats available for container '{container_name}'")]
             
-            # Parse the stats
-            if stats_gen:
-                cpu_percent = 0.0
-                memory_usage = 0
-                memory_limit = 0
-                
-                # CPU calculation
-                cpu_delta = stats_gen.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0) - \
-                           stats_gen.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
-                system_cpu_delta = stats_gen.get("cpu_stats", {}).get("system_cpu_usage", 0) - \
-                                  stats_gen.get("precpu_stats", {}).get("system_cpu_usage", 0)
-                number_cpus = len(stats_gen.get("cpu_stats", {}).get("cpu_usage", {}).get("percpu_usage", []))
-                
-                if system_cpu_delta > 0 and cpu_delta > 0:
-                    cpu_percent = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+            # Get the first (and usually only) stats object
+            stats = stats_list[0]
+            
+            # Extract data from ContainerStats object
+            # The stats object has attributes instead of dict keys
+            try:
+                # CPU percentage (already calculated by python-on-whales)
+                cpu_percent = stats.cpu_percentage if hasattr(stats, 'cpu_percentage') else 0.0
                 
                 # Memory usage
-                memory_stats = stats_gen.get("memory_stats", {})
-                memory_usage = memory_stats.get("usage", 0)
-                memory_limit = memory_stats.get("limit", 0)
-                memory_percent = (memory_usage / memory_limit * 100) if memory_limit > 0 else 0
+                memory_usage = stats.memory_used if hasattr(stats, 'memory_used') else 0
+                memory_limit = stats.memory_limit if hasattr(stats, 'memory_limit') else 0
+                memory_percent = stats.memory_percentage if hasattr(stats, 'memory_percentage') else 0
                 
-                # Network I/O
-                networks = stats_gen.get("networks", {})
-                network_rx = sum(net.get("rx_bytes", 0) for net in networks.values())
-                network_tx = sum(net.get("tx_bytes", 0) for net in networks.values())
+                # Network I/O (might be aggregated)
+                network_rx = stats.network_rx_bytes if hasattr(stats, 'network_rx_bytes') else 0
+                network_tx = stats.network_tx_bytes if hasattr(stats, 'network_tx_bytes') else 0
                 
                 # Block I/O
-                blkio_stats = stats_gen.get("blkio_stats", {})
-                block_read = sum(entry.get("value", 0) for entry in blkio_stats.get("io_service_bytes_recursive", []) 
-                               if entry.get("op") == "Read")
-                block_write = sum(entry.get("value", 0) for entry in blkio_stats.get("io_service_bytes_recursive", []) 
-                                if entry.get("op") == "Write")
+                block_read = stats.blkio_read_bytes if hasattr(stats, 'blkio_read_bytes') else 0
+                block_write = stats.blkio_write_bytes if hasattr(stats, 'blkio_write_bytes') else 0
                 
                 # Format the stats
                 stats_info = f"""Container Stats for '{container_name}':
@@ -511,8 +577,76 @@ Network I/O: RX {network_rx / (1024*1024):.2f} MB / TX {network_tx / (1024*1024)
 Block I/O: Read {block_read / (1024*1024):.2f} MB / Write {block_write / (1024*1024):.2f} MB"""
                 
                 return [TextContent(type="text", text=stats_info)]
-            else:
-                return [TextContent(type="text", text=f"No stats available for container '{container_name}'")]
+                
+            except AttributeError as ae:
+                # If the object doesn't have expected attributes, show what it has
+                available_attrs = [attr for attr in dir(stats) if not attr.startswith('_')]
+                return [TextContent(type="text", text=f"Error: ContainerStats object structure is different than expected.\nAvailable attributes: {', '.join(available_attrs)}\nError: {str(ae)}")]
                 
         except Exception as e:
             return [TextContent(type="text", text=f"Error getting container stats: {str(e)}")]
+    
+    @staticmethod
+    async def handle_exec_container(arguments: Dict[str, Any]) -> List[TextContent]:
+        try:
+            container_name = arguments.get("container_name")
+            command = arguments.get("command")
+            
+            if not container_name or not command:
+                raise ValueError("Missing required container_name or command")
+            
+            # Optional parameters
+            user = arguments.get("user")
+            workdir = arguments.get("workdir")
+            env = arguments.get("env", {})
+            privileged = arguments.get("privileged", False)
+            detach = arguments.get("detach", False)
+            
+            # Build exec kwargs
+            exec_kwargs = {}
+            if user:
+                exec_kwargs["user"] = user
+            if workdir:
+                exec_kwargs["workdir"] = workdir
+            if env:
+                exec_kwargs["environment"] = env
+            if privileged:
+                exec_kwargs["privileged"] = privileged
+            if detach:
+                exec_kwargs["detach"] = detach
+            
+            # Execute the command
+            # Split command into list if it's a string
+            if isinstance(command, str):
+                import shlex
+                command_list = shlex.split(command)
+            else:
+                command_list = command
+            
+            result = await asyncio.to_thread(
+                docker_client.container.execute,
+                container_name,
+                command_list,
+                **exec_kwargs
+            )
+            
+            if detach:
+                return [TextContent(type="text", text=f"Command executed in background in container '{container_name}'")]
+            else:
+                # Format output
+                output = f"Executed in container '{container_name}':\n$ {command}\n\n"
+                if result:
+                    output += str(result)
+                else:
+                    output += "(No output)"
+                
+                return [TextContent(type="text", text=output)]
+                
+        except Exception as e:
+            error_msg = str(e)
+            if "No such container" in error_msg:
+                return [TextContent(type="text", text=f"Container '{container_name}' not found. Please use 'list-containers' to see available containers.")]
+            elif "is not running" in error_msg:
+                return [TextContent(type="text", text=f"Container '{container_name}' is not running. Only running containers can execute commands.")]
+            else:
+                return [TextContent(type="text", text=f"Error executing command: {error_msg}")]

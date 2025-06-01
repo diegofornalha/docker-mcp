@@ -14,6 +14,7 @@ O Docker MCP foi containerizado para melhor isolamento e portabilidade.
 ### Imagem Docker
 - Base: `python:3.11-slim`
 - Inclui todas as dependências necessárias
+- Inclui Docker CLI para compatibilidade com python-on-whales
 - Acesso ao socket Docker do host
 
 ## Como Usar
