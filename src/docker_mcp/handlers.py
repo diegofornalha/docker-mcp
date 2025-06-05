@@ -366,7 +366,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            container = await asyncio.to_thread(docker_client.containers.get, container_name)
             await asyncio.to_thread(container.stop)
             
             return [TextContent(type="text", text=f"Successfully stopped container '{container_name}'")]
@@ -380,7 +380,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            container = await asyncio.to_thread(docker_client.containers.get, container_name)
             await asyncio.to_thread(container.start)
             
             return [TextContent(type="text", text=f"Successfully started container '{container_name}'")]
@@ -396,7 +396,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.container.get, container_name)
+            container = await asyncio.to_thread(docker_client.containers.get, container_name)
             
             # Check if container is running and force is not set
             if container.state.status == "running" and not force:
