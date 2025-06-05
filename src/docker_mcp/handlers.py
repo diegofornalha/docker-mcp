@@ -366,8 +366,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.containers.get, container_name)
-            await asyncio.to_thread(container.stop)
+            await asyncio.to_thread(docker_client.container.stop, container_name)
             
             return [TextContent(type="text", text=f"Successfully stopped container '{container_name}'")]
         except Exception as e:
@@ -380,8 +379,7 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.containers.get, container_name)
-            await asyncio.to_thread(container.start)
+            await asyncio.to_thread(docker_client.container.start, container_name)
             
             return [TextContent(type="text", text=f"Successfully started container '{container_name}'")]
         except Exception as e:
@@ -396,13 +394,16 @@ class DockerHandlers:
             if not container_name:
                 raise ValueError("Missing required container_name")
             
-            container = await asyncio.to_thread(docker_client.containers.get, container_name)
-            
             # Check if container is running and force is not set
-            if container.state.status == "running" and not force:
-                return [TextContent(type="text", text=f"Container '{container_name}' is running. Use force=true to remove it, or stop it first.")]
+            if not force:
+                try:
+                    container_info = await asyncio.to_thread(docker_client.container.inspect, container_name)
+                    if container_info.state.status == "running":
+                        return [TextContent(type="text", text=f"Container '{container_name}' is running. Use force=true to remove it, or stop it first.")]
+                except:
+                    pass
             
-            await asyncio.to_thread(container.remove, force=force)
+            await asyncio.to_thread(docker_client.container.remove, container_name, force=force)
             
             return [TextContent(type="text", text=f"Successfully removed container '{container_name}'")]
         except Exception as e:
